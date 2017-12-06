@@ -201,6 +201,7 @@ def make_session(num_cpu):
     tf_config = tf.ConfigProto(
         inter_op_parallelism_threads=num_cpu,
         intra_op_parallelism_threads=num_cpu)
+    tf_config.gpu_options.allow_growth = True
     return tf.Session(config=tf_config)
 
 def single_threaded_session():

@@ -1,0 +1,22 @@
+Logging to /home/zhangxiaoqin/Projects/conda/baselines/baselines/acer/log
+----------------------------------
+| avg_norm_adj        | 0.108    |
+| avg_norm_g          | 2.16     |
+| avg_norm_grads_f    | 2.08     |
+| avg_norm_k          | 2        |
+| avg_norm_k_dot_g    | 2.16     |
+| entropy             | 1.39     |
+| explained_variance  | -0.122   |
+| fps                 | 0        |
+| loss                | 0.375    |
+| loss_bc             | -0       |
+| loss_f              | 0.247    |
+| loss_policy         | 0.247    |
+| loss_q              | 0.283    |
+| mean_episode_length | 0        |
+| mean_episode_reward | 0        |
+| norm_grads          | 1.51     |
+| norm_grads_policy   | 0.388    |
+| norm_grads_q        | 1.46     |
+| total_timesteps     | 0        |
+----------------------------------

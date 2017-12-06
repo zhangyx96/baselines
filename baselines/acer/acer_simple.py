@@ -59,6 +59,7 @@ class Model(object):
         config = tf.ConfigProto(allow_soft_placement=True,
                                 intra_op_parallelism_threads=num_procs,
                                 inter_op_parallelism_threads=num_procs)
+        config.gpu_options.allow_growth = True
         sess = tf.Session(config=config)
         nact = ac_space.n
         nbatch = nenvs * nsteps

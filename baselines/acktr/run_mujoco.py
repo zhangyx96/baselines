@@ -10,15 +10,19 @@ from baselines import bench
 from baselines.acktr.acktr_cont import learn
 from baselines.acktr.policies import GaussianMlpPolicy
 from baselines.acktr.value_functions import NeuralNetValueFunction
+from mpi4py import MPI
 
 def train(env_id, num_timesteps, seed):
     env=gym.make(env_id)
+    rank = MPI.COMM_WORLD.Get_rank()
     env = bench.Monitor(env, logger.get_dir() and os.path.join(logger.get_dir(), str(rank)))
     set_global_seeds(seed)
     env.seed(seed)
     gym.logger.setLevel(logging.WARN)
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
 
-    with tf.Session(config=tf.ConfigProto()):
+    with tf.Session(config=config):
         ob_dim = env.observation_space.shape[0]
         ac_dim = env.action_space.shape[0]
         with tf.variable_scope("vf"):
