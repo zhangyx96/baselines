@@ -18,7 +18,7 @@ keys/
 
 .idea
 
-logs/
+*/logs/
 
 .ipynb_checkpoints
 ghostdriver.log
