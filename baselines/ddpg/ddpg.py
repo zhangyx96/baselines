@@ -333,6 +333,13 @@ class DDPG(object):
         self.critic_optimizer.sync()
         self.sess.run(self.target_init_updates)
 
+        checkpoint = tf.train.get_checkpoint_state(self.ckp_dir)
+        if self.saver and checkpoint and checkpoint.model_checkpoint_path:
+            self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
+            logger.info('Successfully loaded {}'.format(checkpoint.model_checkpoint_path))
+        else:
+            logger.info('Could not find old network weights')
+
     def update_target_net(self):
         self.sess.run(self.target_soft_updates)
 
