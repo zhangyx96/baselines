@@ -32,7 +32,7 @@ class Expert:
                                             name='expert_action')
         normalized_state = tf.clip_by_value(normalize(self.expert_state, obs_rms),
                                             observation_range[0], observation_range[1])
-        expert_actor = actor(self.expert_state, reuse=True)
+        expert_actor = actor(normalized_state, reuse=True)
         normalized_q_with_expert_data = critic(normalized_state, self.expert_action, reuse=True)
         normalized_q_with_expert_actor = critic(normalized_state, expert_actor, reuse=True)
         self.Q_with_expert_data = denormalize(
