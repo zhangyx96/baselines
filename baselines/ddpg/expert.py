@@ -12,12 +12,6 @@ class Expert:
                              action_shape=self.env.action_space.shape,
                              observation_shape=self.env.observation_space.shape)
         self.file_dir = None
-        self.expert_state = tf.placeholder(tf.float32, shape=(None,)+self.env.observation_space.shape, name='expert_state')
-        self.expert_action = tf.placeholder(tf.float32, shape=(None,)+self.env.action_space.shape, name='expert_action')
-        self.Q_with_expert_data = None
-        self.Q_with_expert_actor = None
-        self.loss = None
-        self.obs_rms = None
 
     def load_file(self, file_dir):
         self.file_dir = file_dir
@@ -32,10 +26,13 @@ class Expert:
         return self.memory.sample(batch_size)
 
     def set_tf(self, actor, critic, obs_rms, ret_rms, observation_range, return_range):
-
+        self.expert_state = tf.placeholder(tf.float32, shape=(None,) + self.env.observation_space.shape,
+                                           name='expert_state')
+        self.expert_action = tf.placeholder(tf.float32, shape=(None,) + self.env.action_space.shape,
+                                            name='expert_action')
         normalized_state = tf.clip_by_value(normalize(self.expert_state, obs_rms),
                                             observation_range[0], observation_range[1])
-        expert_actor = actor(normalized_state, reuse=True)
+        expert_actor = actor(self.expert_state, reuse=True)
         normalized_q_with_expert_data = critic(normalized_state, self.expert_action, reuse=True)
         normalized_q_with_expert_actor = critic(normalized_state, expert_actor, reuse=True)
         self.Q_with_expert_data = denormalize(
