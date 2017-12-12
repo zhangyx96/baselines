@@ -16,7 +16,7 @@ from mpi4py import MPI
 def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, param_noise, actor, critic,
     normalize_returns, normalize_observations, critic_l2_reg, actor_lr, critic_lr, action_noise,
     popart, gamma, clip_norm, nb_train_steps, nb_rollout_steps, nb_eval_steps, batch_size, memory,
-    tau=0.01, eval_env=None, param_noise_adaption_interval=50, perform=False):
+    tau=0.01, eval_env=None, param_noise_adaption_interval=50, perform=False, expert=None):
     rank = MPI.COMM_WORLD.Get_rank()
 
     assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
@@ -26,7 +26,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
         gamma=gamma, tau=tau, normalize_returns=normalize_returns, normalize_observations=normalize_observations,
         batch_size=batch_size, action_noise=action_noise, param_noise=param_noise, critic_l2_reg=critic_l2_reg,
         actor_lr=actor_lr, critic_lr=critic_lr, enable_popart=popart, clip_norm=clip_norm,
-        reward_scale=reward_scale)
+        reward_scale=reward_scale, expert=expert)
     logger.info('Using agent with the following configuration:')
     logger.info(str(agent.__dict__.items()))
 
@@ -45,7 +45,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
         network_saving_dir = os.path.join('./saved_networks', env.env.spec.id)+'/'
         if not os.path.exists(network_saving_dir):
             os.makedirs(network_saving_dir)
-        agent.initialize(sess, saver, network_saving_dir, 10000)
+        agent.initialize(sess, saver, network_saving_dir, 10000, 30000)
         sess.graph.finalize()
 
         agent.reset()
@@ -156,7 +156,7 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
                                     expert_dir = os.path.join('./expert', env.env.spec.id) + '/'
                                     if not os.path.exists(expert_dir):
                                         os.makedirs(expert_dir)
-                                    pwritefile = open(expert_dir, 'wb')
+                                    pwritefile = open(os.path.join(expert_dir, 'expert.pkl'), 'wb')
                                     pickle.dump(big_buffer, pwritefile, -1)
                                     pwritefile.close()
                                     logger.info('Expert data saved!')

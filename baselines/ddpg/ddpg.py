@@ -11,7 +11,6 @@ import baselines.common.tf_util as U
 from baselines.common.mpi_running_mean_std import RunningMeanStd
 from baselines.ddpg.util import reduce_std, mpi_mean
 
-
 def normalize(x, stats):
     if stats is None:
         return x
@@ -59,7 +58,7 @@ class DDPG(object):
         gamma=0.99, tau=0.001, normalize_returns=False, enable_popart=False, normalize_observations=True,
         batch_size=128, observation_range=(-5., 5.), action_range=(-1., 1.), return_range=(-np.inf, np.inf),
         adaptive_param_noise=True, adaptive_param_noise_policy_threshold=.1,
-        critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1.):
+        critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1., expert = None):
         # Inputs.
         self.obs0 = tf.placeholder(tf.float32, shape=(None,) + observation_shape, name='obs0')
         self.obs1 = tf.placeholder(tf.float32, shape=(None,) + observation_shape, name='obs1')
@@ -90,6 +89,7 @@ class DDPG(object):
         self.batch_size = batch_size
         self.stats_sample = None
         self.critic_l2_reg = critic_l2_reg
+        self.expert = expert
 
         # Observation normalization.
         if self.normalize_observations:
@@ -126,8 +126,13 @@ class DDPG(object):
         Q_obs1 = denormalize(target_critic(normalized_obs1, target_actor(normalized_obs1)), self.ret_rms)
         self.target_Q = self.rewards + (1. - self.terminals1) * gamma * Q_obs1
 
+        if self.expert is not None:
+            self.expert.set_tf(actor=actor, critic=critic, obs_rms=self.obs_rms, ret_rms=self.ret_rms,
+                               observation_range=self.observation_range, return_range=self.return_range)
+
         training_step = tf.get_variable('training_step', shape=[1], initializer=tf.ones_initializer)
         self.training_step_run = training_step.assign(training_step + 1)
+        self.training_step = 0
 
         # Set up parts.
         if self.param_noise is not None:
@@ -187,13 +192,19 @@ class DDPG(object):
                 weights_list=critic_reg_vars
             )
             self.critic_loss += critic_reg
+
+        if self.expert is not None:
+            self.expert_critic_loss = self.expert.loss + self.critic_loss
         critic_shapes = [var.get_shape().as_list() for var in self.critic.trainable_vars]
         critic_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in critic_shapes])
         logger.info('  critic shapes: {}'.format(critic_shapes))
         logger.info('  critic params: {}'.format(critic_nb_params))
         self.critic_grads = U.flatgrad(self.critic_loss, self.critic.trainable_vars, clip_norm=self.clip_norm)
-        self.critic_optimizer = MpiAdam(var_list=self.critic.trainable_vars,
-            beta1=0.9, beta2=0.999, epsilon=1e-08)
+        if self.expert is not None:
+            self.expert_critic_grads = U.flatgrad(self.expert_critic_loss, self.critic.trainable_vars, clip_norm=self.clip_norm)
+        else:
+            self.expert_critic_grads = None
+        self.critic_optimizer = MpiAdam(var_list=self.critic.trainable_vars, beta1=0.9, beta2=0.999, epsilon=1e-08)
 
     def setup_popart(self):
         # See https://arxiv.org/pdf/1602.07714.pdf for details.
@@ -307,27 +318,39 @@ class DDPG(object):
             })
 
         # Get all gradients and perform a synced update.
-        ops = [self.training_step_run, self.actor_grads, self.actor_loss, self.critic_grads, self.critic_loss]
-        training_step, actor_grads, actor_loss, critic_grads, critic_loss = self.sess.run(ops, feed_dict={
-            self.obs0: batch['obs0'],
-            self.actions: batch['actions'],
-            self.critic_target: target_Q,
-        })
+        if self.expert is not None and self.training_step < self.expert_steps:
+            expert_batch = self.expert.sample(batch_size=self.batch_size)
+            ops = [self.training_step_run, self.actor_grads, self.actor_loss, self.expert_critic_grads, self.expert_critic_loss]
+            training_step, actor_grads, actor_loss, critic_grads, critic_loss = self.sess.run(ops, feed_dict={
+                self.obs0: batch['obs0'],
+                self.actions: batch['actions'],
+                self.critic_target: target_Q,
+                self.expert.expert_state: expert_batch['obs0'],
+                self.expert.expert_action: expert_batch['actions']
+            })
+        else:
+            ops = [self.training_step_run, self.actor_grads, self.actor_loss, self.critic_grads, self.critic_loss]
+            training_step, actor_grads, actor_loss, critic_grads, critic_loss = self.sess.run(ops, feed_dict={
+                self.obs0: batch['obs0'],
+                self.actions: batch['actions'],
+                self.critic_target: target_Q,
+            })
         self.actor_optimizer.update(actor_grads, stepsize=self.actor_lr)
         self.critic_optimizer.update(critic_grads, stepsize=self.critic_lr)
 
-        training_step = training_step[0]
-        if training_step.astype(int) % self.save_steps == 0:
-            logger.info('Saved network with {} training steps'.format(training_step.astype(int)))
-            self.saver.save(self.sess, self.ckp_dir, global_step=training_step.astype(int))
+        self.training_step = training_step[0]
+        if self.training_step.astype(int) % self.save_steps == 0:
+            logger.info('Saved network with {} training steps'.format(self.training_step.astype(int)))
+            self.saver.save(self.sess, self.ckp_dir, global_step=self.training_step.astype(int))
 
         return critic_loss, actor_loss
 
-    def initialize(self, sess, saver, ckp_dir, save_steps):
+    def initialize(self, sess, saver, ckp_dir, save_steps, expert_steps):
         self.sess = sess
         self.saver = saver
         self.ckp_dir = ckp_dir
         self.save_steps = save_steps
+        self.expert_steps = expert_steps
         self.sess.run(tf.global_variables_initializer())
         self.actor_optimizer.sync()
         self.critic_optimizer.sync()

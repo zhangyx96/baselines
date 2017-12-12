@@ -12,13 +12,14 @@ import baselines.ddpg.training as training
 from baselines.ddpg.models import Actor, Critic
 from baselines.ddpg.memory import Memory
 from baselines.ddpg.noise import *
+from baselines.ddpg.expert import Expert
 
 import gym
 import tensorflow as tf
 from mpi4py import MPI
 
 
-def run(env_id, seed, noise_type, layer_norm, evaluation, perform, **kwargs):
+def run(env_id, seed, noise_type, layer_norm, evaluation, perform, use_expert, **kwargs):
     # Configure things.
     rank = MPI.COMM_WORLD.Get_rank()
     if rank != 0:
@@ -62,6 +63,12 @@ def run(env_id, seed, noise_type, layer_norm, evaluation, perform, **kwargs):
     memory = Memory(limit=int(1e6), action_shape=env.action_space.shape, observation_shape=env.observation_space.shape)
     critic = Critic(layer_norm=layer_norm)
     actor = Actor(nb_actions, layer_norm=layer_norm)
+    if use_expert:
+        expert = Expert(limit=int(1e6), env=env)
+        expert_dir = os.path.join('./expert', env.env.spec.id) + '/expert.pkl'
+        expert.load_file(expert_dir)
+    else:
+        expert = None
 
     # Seed everything to make things reproducible.
     seed = seed + 1000000 * rank
@@ -76,7 +83,7 @@ def run(env_id, seed, noise_type, layer_norm, evaluation, perform, **kwargs):
     if rank == 0:
         start_time = time.time()
     training.train(env=env, eval_env=eval_env, param_noise=param_noise,
-        action_noise=action_noise, actor=actor, critic=critic, memory=memory, perform=perform, **kwargs)
+        action_noise=action_noise, actor=actor, critic=critic, memory=memory, perform=perform, expert=expert, **kwargs)
     env.close()
     if eval_env is not None:
         eval_env.close()
@@ -111,6 +118,8 @@ def parse_args():
     parser.add_argument('--num-timesteps', type=int, default=None)
     boolean_flag(parser, 'evaluation', default=False)
     boolean_flag(parser, 'perform', default=False)
+    boolean_flag(parser, 'use-expert', default=False)
+
     args = parser.parse_args()
     # we don't directly specify timesteps for this script, so make sure that if we do specify them
     # they agree with the other parameters
