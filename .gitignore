@@ -20,6 +20,7 @@ keys/
 
 logs/
 log/
+expert/
 saved_networks/
 
 .ipynb_checkpoints
