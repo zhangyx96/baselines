@@ -42,7 +42,10 @@ def train(env, nb_epochs, nb_epoch_cycles, render_eval, reward_scale, render, pa
     episode_rewards_history = deque(maxlen=100)
     with U.single_threaded_session() as sess:
         # Prepare everything.
-        agent.initialize(sess)
+        network_saving_dir = os.path.join('./saved_networks', env.env.spec.id)+'/'
+        if not os.path.exists(network_saving_dir):
+            os.makedirs(network_saving_dir)
+        agent.initialize(sess, saver, network_saving_dir, 10000)
         sess.graph.finalize()
 
         agent.reset()

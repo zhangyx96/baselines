@@ -1,6 +1,7 @@
 import argparse
 import time
 import os
+import datetime
 import logging
 from baselines import logger, bench
 from baselines.common.misc_util import (
@@ -30,7 +31,7 @@ def run(env_id, seed, noise_type, layer_norm, evaluation, **kwargs):
     if evaluation and rank==0:
         eval_env = gym.make(env_id)
         eval_env = bench.Monitor(eval_env, os.path.join(logger.get_dir(), 'gym_eval'))
-        env = bench.Monitor(env, None)
+        # env = bench.Monitor(env, None)
     else:
         eval_env = None
 
@@ -119,6 +120,8 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     if MPI.COMM_WORLD.Get_rank() == 0:
-        logger.configure()
+        # print(args['env_id'])
+        dir = os.path.join('./logs/', args['env_id'], datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f"))
+        logger.configure(dir=dir)
     # Run actual script.
     run(**args)

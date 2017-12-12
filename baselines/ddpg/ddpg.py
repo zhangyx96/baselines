@@ -126,6 +126,9 @@ class DDPG(object):
         Q_obs1 = denormalize(target_critic(normalized_obs1, target_actor(normalized_obs1)), self.ret_rms)
         self.target_Q = self.rewards + (1. - self.terminals1) * gamma * Q_obs1
 
+        training_step = tf.get_variable('training_step', shape=[1], initializer=tf.ones_initializer)
+        self.training_step_run = training_step.assign(training_step + 1)
+
         # Set up parts.
         if self.param_noise is not None:
             self.setup_param_noise(normalized_obs0)
@@ -304,8 +307,8 @@ class DDPG(object):
             })
 
         # Get all gradients and perform a synced update.
-        ops = [self.actor_grads, self.actor_loss, self.critic_grads, self.critic_loss]
-        actor_grads, actor_loss, critic_grads, critic_loss = self.sess.run(ops, feed_dict={
+        ops = [self.training_step_run, self.actor_grads, self.actor_loss, self.critic_grads, self.critic_loss]
+        training_step, actor_grads, actor_loss, critic_grads, critic_loss = self.sess.run(ops, feed_dict={
             self.obs0: batch['obs0'],
             self.actions: batch['actions'],
             self.critic_target: target_Q,
@@ -313,10 +316,18 @@ class DDPG(object):
         self.actor_optimizer.update(actor_grads, stepsize=self.actor_lr)
         self.critic_optimizer.update(critic_grads, stepsize=self.critic_lr)
 
+        training_step = training_step[0]
+        if training_step.astype(int) % self.save_steps == 0:
+            logger.info('Saved network with {} training steps'.format(training_step.astype(int)))
+            self.saver.save(self.sess, self.ckp_dir, global_step=training_step.astype(int))
+
         return critic_loss, actor_loss
 
-    def initialize(self, sess):
+    def initialize(self, sess, saver, ckp_dir, save_steps):
         self.sess = sess
+        self.saver = saver
+        self.ckp_dir = ckp_dir
+        self.save_steps = save_steps
         self.sess.run(tf.global_variables_initializer())
         self.actor_optimizer.sync()
         self.critic_optimizer.sync()
