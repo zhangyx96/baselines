@@ -8,6 +8,8 @@ from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.atari_wrappers import make_atari, wrap_deepmind
 from baselines.acer.policies import AcerCnnPolicy, AcerLstmPolicy
 
+import datetime
+
 def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu):
     def make_env(rank):
         def _thunk():
@@ -38,6 +40,12 @@ def main():
     parser.add_argument('--lrschedule', help='Learning rate schedule', choices=['constant', 'linear'], default='constant')
     parser.add_argument('--logdir', help ='Directory for logging', default='./log')
     parser.add_argument('--num-timesteps', type=int, default=int(10e6))
+
+    boolean_flag(parser, 'perform', default=False)
+    boolean_flag(parser, 'use-expert', default=False)
+    boolean_flag(parser, 'save-networks', default=False)
+
+
     args = parser.parse_args()
     logger.configure(os.path.abspath(args.logdir))
     train(args.env, num_timesteps=args.num_timesteps, seed=args.seed,
