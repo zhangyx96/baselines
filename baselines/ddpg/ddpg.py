@@ -171,13 +171,19 @@ class DDPG(object):
     def setup_actor_optimizer(self):
         logger.info('setting up actor optimizer')
         self.actor_loss = -tf.reduce_mean(self.critic_with_actor_tf)
+        if self.expert is not None:
+            self.expert_actor_loss = self.expert.actor_loss
         actor_shapes = [var.get_shape().as_list() for var in self.actor.trainable_vars]
         actor_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in actor_shapes])
         logger.info('  actor shapes: {}'.format(actor_shapes))
         logger.info('  actor params: {}'.format(actor_nb_params))
         self.actor_grads = U.flatgrad(self.actor_loss, self.actor.trainable_vars, clip_norm=self.clip_norm)
-        self.actor_optimizer = MpiAdam(var_list=self.actor.trainable_vars,
-            beta1=0.9, beta2=0.999, epsilon=1e-08)
+        if self.expert is not None:
+            self.expert_actor_grads = U.flatgrad(self.expert_actor_loss, self.actor.trainable_vars,
+                                                 clip_norm=self.clip_norm)
+        else:
+            self.expert_actor_grads = None
+        self.actor_optimizer = MpiAdam(var_list=self.actor.trainable_vars, beta1=0.9, beta2=0.999, epsilon=1e-08)
 
     def setup_critic_optimizer(self):
         logger.info('setting up critic optimizer')
@@ -195,7 +201,7 @@ class DDPG(object):
             self.critic_loss += critic_reg
 
         if self.expert is not None:
-            self.expert_critic_loss = self.expert.loss + self.critic_loss
+            self.expert_critic_loss = self.expert.critic_loss + self.critic_loss
         critic_shapes = [var.get_shape().as_list() for var in self.critic.trainable_vars]
         critic_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in critic_shapes])
         logger.info('  critic shapes: {}'.format(critic_shapes))
@@ -321,7 +327,8 @@ class DDPG(object):
         # Get all gradients and perform a synced update.
         if self.expert is not None and self.training_step < self.expert_steps:
             expert_batch = self.expert.sample(batch_size=self.batch_size)
-            ops = [self.training_step_run, self.actor_grads, self.actor_loss, self.expert_critic_grads, self.expert_critic_loss]
+            ops = [self.training_step_run, self.expert_actor_grads, self.expert_actor_loss,
+                   self.expert_critic_grads, self.expert_critic_loss]
             training_step, actor_grads, actor_loss, critic_grads, critic_loss = self.sess.run(ops, feed_dict={
                 self.obs0: batch['obs0'],
                 self.actions: batch['actions'],
