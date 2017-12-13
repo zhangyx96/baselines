@@ -58,7 +58,7 @@ class DDPG(object):
         gamma=0.99, tau=0.001, normalize_returns=False, enable_popart=False, normalize_observations=True,
         batch_size=128, observation_range=(-5., 5.), action_range=(-1., 1.), return_range=(-np.inf, np.inf),
         adaptive_param_noise=True, adaptive_param_noise_policy_threshold=.1,
-        critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1., expert = None):
+        critic_l2_reg=0., actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1., expert=None, save_networks=False):
         # Inputs.
         self.obs0 = tf.placeholder(tf.float32, shape=(None,) + observation_shape, name='obs0')
         self.obs1 = tf.placeholder(tf.float32, shape=(None,) + observation_shape, name='obs1')
@@ -90,6 +90,7 @@ class DDPG(object):
         self.stats_sample = None
         self.critic_l2_reg = critic_l2_reg
         self.expert = expert
+        self.save_networks = save_networks
 
         # Observation normalization.
         if self.normalize_observations:
@@ -337,11 +338,11 @@ class DDPG(object):
             })
         self.actor_optimizer.update(actor_grads, stepsize=self.actor_lr)
         self.critic_optimizer.update(critic_grads, stepsize=self.critic_lr)
-
-        self.training_step = training_step[0]
-        if self.training_step.astype(int) % self.save_steps == 0:
-            logger.info('Saved network with {} training steps'.format(self.training_step.astype(int)))
-            self.saver.save(self.sess, self.ckp_dir, global_step=self.training_step.astype(int))
+        if self.save_networks:
+            self.training_step = training_step[0]
+            if self.training_step.astype(int) % self.save_steps == 0:
+                logger.info('Saved network with {} training steps'.format(self.training_step.astype(int)))
+                self.saver.save(self.sess, self.ckp_dir, global_step=self.training_step.astype(int))
 
         return critic_loss, actor_loss
 

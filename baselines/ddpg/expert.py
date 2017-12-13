@@ -39,4 +39,4 @@ class Expert:
             tf.clip_by_value(normalized_q_with_expert_data, return_range[0], return_range[1]), ret_rms)
         self.Q_with_expert_actor = denormalize(
             tf.clip_by_value(normalized_q_with_expert_actor, return_range[0], return_range[1]), ret_rms)
-        self.loss = tf.reduce_mean(self.Q_with_expert_actor - self.Q_with_expert_data)
+        self.loss = tf.reduce_mean(tf.nn.softplus(self.Q_with_expert_actor - self.Q_with_expert_data))

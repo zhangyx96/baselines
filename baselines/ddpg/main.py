@@ -119,6 +119,7 @@ def parse_args():
     boolean_flag(parser, 'evaluation', default=False)
     boolean_flag(parser, 'perform', default=False)
     boolean_flag(parser, 'use-expert', default=False)
+    boolean_flag(parser, 'save-networks', default=False)
 
     args = parser.parse_args()
     # we don't directly specify timesteps for this script, so make sure that if we do specify them
