@@ -1,4 +1,5 @@
 import time
+import os
 import joblib
 import numpy as np
 import tensorflow as tf
@@ -55,7 +56,7 @@ class Model(object):
     def __init__(self, policy, ob_space, ac_space, nenvs, nsteps, nstack, num_procs,
                  ent_coef, q_coef, gamma, max_grad_norm, lr,
                  rprop_alpha, rprop_epsilon, total_timesteps, lrschedule,
-                 c, trust_region, alpha, delta):
+                 c, trust_region, alpha, delta, network_saving_dir):
         config = tf.ConfigProto(allow_soft_placement=True,
                                 intra_op_parallelism_threads=num_procs,
                                 inter_op_parallelism_threads=num_procs)
@@ -63,7 +64,7 @@ class Model(object):
         sess = tf.Session(config=config)
         nact = ac_space.n
         nbatch = nenvs * nsteps
-
+  
         A = tf.placeholder(tf.int32, [nbatch]) # actions
         D = tf.placeholder(tf.float32, [nbatch]) # dones
         R = tf.placeholder(tf.float32, [nbatch]) # rewards, not returns
@@ -186,6 +187,9 @@ class Model(object):
                                  avg_norm_adj]
             names_ops = names_ops + ['norm_grads_q', 'norm_grads_policy', 'avg_norm_grads_f', 'avg_norm_k', 'avg_norm_g',
                                      'avg_norm_k_dot_g', 'avg_norm_adj']
+        
+        
+
 
         def train(obs, actions, rewards, dones, mus, states, masks, steps):
             cur_lr = lr.value_steps(steps)
@@ -195,15 +199,50 @@ class Model(object):
                 td_map[train_model.M] = masks
                 td_map[polyak_model.S] = states
                 td_map[polyak_model.M] = masks
+
+            checkpoint = tf.train.get_checkpoint_state('./models/')
+
+            if self.saver and checkpoint and checkpoint.model_checkpoint_path:
+                self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
+                logger.info('Successfully loaded {}'.format(checkpoint.model_checkpoint_path))
+            else:
+                logger.info('Could not find old network weights')
+
+            # sess.run(run_ops, td_map)
+            
+            # if save_networks and on_policy:
+            #     self.saver.save(self.sess, self.cpk_dir, )
+
             return names_ops, sess.run(run_ops, td_map)[1:]  # strip off _train
 
-        def save(save_path):
-            ps = sess.run(params)
-            make_path(save_path)
-            joblib.dump(ps, save_path)
+        # def save(save_path):
+        #     ps = sess.run(params)
+        #     make_path(save_path)
+        #     joblib.dump(ps, save_path)
+
+
+
+        def save(training_step):
+            logger.info('Saved network with {} training steps'.format(training_step))
+            self.saver.save(self.sess, self.cpk_dir + 'demo', global_step=training_step)
+        
+        # def load():
+        #     print(self.cpk_dir)
+        #     checkpoint = tf.train.get_checkpoint_state(self.cpk_dir)
+        #     if checkpoint and checkpoint.model_checkpoint_path:
+        #         self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
+        #         logger.info('Successfully loaded {}'.format(checkpoint.model_checkpoint_path))
+        #     else:
+        #         logger.info('Could not find old network weights')
+
+        saver = tf.train.Saver()
+        self.saver = saver
+        self.sess = sess
+        self.cpk_dir = network_saving_dir
+        self.save = save
+        #self.load = load
 
         self.train = train
-        self.save = save
         self.train_model = train_model
         self.step_model = step_model
         self.step = step_model.step
@@ -279,7 +318,7 @@ class Acer():
         self.episode_stats = EpisodeStats(runner.nsteps, runner.nenv)
         self.steps = None
 
-    def call(self, on_policy):
+    def call(self, save_networks, on_policy):
         runner, model, buffer, steps = self.runner, self.model, self.buffer, self.steps
         if on_policy:
             enc_obs, obs, actions, rewards, mus, dones, masks = runner.run()
@@ -312,25 +351,33 @@ class Acer():
                 logger.record_tabular(name, float(val))
             logger.dump_tabular()
 
+            if save_networks:
+                model.save(int(steps))
 
-def learn(policy, env, seed, nsteps=20, nstack=4, total_timesteps=int(80e6), q_coef=0.5, ent_coef=0.01,
+
+def learn(policy, env, seed, perform, expert = False,save_networks = False, network_saving_dir = None, total_timesteps = int(80e6),nsteps=20,nstack=4, q_coef=0.5, ent_coef=0.01,
           max_grad_norm=10, lr=7e-4, lrschedule='linear', rprop_epsilon=1e-5, rprop_alpha=0.99, gamma=0.99,
           log_interval=100, buffer_size=50000, replay_ratio=4, replay_start=10000, c=10.0,
           trust_region=True, alpha=0.99, delta=1):
-    print("Running Acer Simple")
+
+
+
     print(locals())
     tf.reset_default_graph()
     set_global_seeds(seed)
 
     nenvs = env.num_envs
-    ob_space = env.observation_space
-    ac_space = env.action_space
+    ob_space = env.observation_space   #Box(84,84,1)
+    ac_space = env.action_space   #Discrete(4)
+
+    
+
     num_procs = len(env.remotes) # HACK
     model = Model(policy=policy, ob_space=ob_space, ac_space=ac_space, nenvs=nenvs, nsteps=nsteps, nstack=nstack,
                   num_procs=num_procs, ent_coef=ent_coef, q_coef=q_coef, gamma=gamma,
                   max_grad_norm=max_grad_norm, lr=lr, rprop_alpha=rprop_alpha, rprop_epsilon=rprop_epsilon,
                   total_timesteps=total_timesteps, lrschedule=lrschedule, c=c,
-                  trust_region=trust_region, alpha=alpha, delta=delta)
+                  trust_region=trust_region, alpha=alpha, delta=delta, network_saving_dir = network_saving_dir)
 
     runner = Runner(env=env, model=model, nsteps=nsteps, nstack=nstack)
     if replay_ratio > 0:
@@ -340,11 +387,16 @@ def learn(policy, env, seed, nsteps=20, nstack=4, total_timesteps=int(80e6), q_c
     nbatch = nenvs*nsteps
     acer = Acer(runner, model, buffer, log_interval)
     acer.tstart = time.time()
+
+    #model.load()
     for acer.steps in range(0, total_timesteps, nbatch): #nbatch samples, 1 on_policy call and multiple off-policy calls
-        acer.call(on_policy=True)
+        acer.call(save_networks,on_policy=True)
+
         if replay_ratio > 0 and buffer.has_atleast(replay_start):
             n = np.random.poisson(replay_ratio)
             for _ in range(n):
-                acer.call(on_policy=False)  # no simulation steps in this
+                acer.call(save_networks,on_policy=False)  # no simulation steps in this
 
+    #dir = os.path.join('./models/', 'test.m')
+    #model.save('./models/test_2.pkl')
     env.close()
