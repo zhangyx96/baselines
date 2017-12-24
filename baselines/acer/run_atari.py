@@ -32,7 +32,8 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu, perform, exp
 
     network_saving_dir = os.path.join('./saved_networks', env_id)+'/'
     if not os.path.exists(network_saving_dir):
-            os.makedirs(network_saving_dir)
+        os.makedirs(network_saving_dir)
+        
     learn(policy_fn, env, seed, perform, expert, save_networks, network_saving_dir, int(num_timesteps * 1.1), lrschedule=lrschedule)
     env.close()
 
@@ -44,7 +45,7 @@ def main():
     parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'lstm', 'lnlstm'], default='cnn')
     parser.add_argument('--lrschedule', help='Learning rate schedule', choices=['constant', 'linear'], default='constant')
     parser.add_argument('--logdir', help ='Directory for logging', default='./log')
-    parser.add_argument('--num-timesteps', type=int, default=int(10e5))
+    parser.add_argument('--num-timesteps', type=int, default=int(10e4))
     boolean_flag(parser, 'perform', default=False)
     boolean_flag(parser, 'use-expert', default=False)
     boolean_flag(parser, 'save-networks', default=False)

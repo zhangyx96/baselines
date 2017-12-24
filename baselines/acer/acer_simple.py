@@ -200,19 +200,6 @@ class Model(object):
                 td_map[polyak_model.S] = states
                 td_map[polyak_model.M] = masks
 
-            checkpoint = tf.train.get_checkpoint_state('./models/')
-
-            if self.saver and checkpoint and checkpoint.model_checkpoint_path:
-                self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
-                logger.info('Successfully loaded {}'.format(checkpoint.model_checkpoint_path))
-            else:
-                logger.info('Could not find old network weights')
-
-            # sess.run(run_ops, td_map)
-            
-            # if save_networks and on_policy:
-            #     self.saver.save(self.sess, self.cpk_dir, )
-
             return names_ops, sess.run(run_ops, td_map)[1:]  # strip off _train
 
         # def save(save_path):
@@ -220,27 +207,25 @@ class Model(object):
         #     make_path(save_path)
         #     joblib.dump(ps, save_path)
 
-
-
         def save(training_step):
             logger.info('Saved network with {} training steps'.format(training_step))
             self.saver.save(self.sess, self.cpk_dir + 'demo', global_step=training_step)
         
-        # def load():
-        #     print(self.cpk_dir)
-        #     checkpoint = tf.train.get_checkpoint_state(self.cpk_dir)
-        #     if checkpoint and checkpoint.model_checkpoint_path:
-        #         self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
-        #         logger.info('Successfully loaded {}'.format(checkpoint.model_checkpoint_path))
-        #     else:
-        #         logger.info('Could not find old network weights')
+        def load():
+            print(self.cpk_dir)
+            checkpoint = tf.train.get_checkpoint_state(self.cpk_dir)
+            if checkpoint and checkpoint.model_checkpoint_path:
+                self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
+                logger.info('Successfully loaded {}'.format(checkpoint.model_checkpoint_path))
+            else:
+                logger.info('Could not find old network weights')
 
         saver = tf.train.Saver()
         self.saver = saver
         self.sess = sess
         self.cpk_dir = network_saving_dir
         self.save = save
-        #self.load = load
+        self.load = load
 
         self.train = train
         self.train_model = train_model
@@ -318,7 +303,7 @@ class Acer():
         self.episode_stats = EpisodeStats(runner.nsteps, runner.nenv)
         self.steps = None
 
-    def call(self, save_networks, on_policy):
+    def call(self, perform, save_networks, on_policy):
         runner, model, buffer, steps = self.runner, self.model, self.buffer, self.steps
         if on_policy:
             enc_obs, obs, actions, rewards, mus, dones, masks = runner.run()
@@ -329,33 +314,35 @@ class Acer():
             # get obs, actions, rewards, mus, dones from buffer.
             obs, actions, rewards, mus, dones, masks = buffer.get()
 
+
+        if not perform: 
         # reshape stuff correctly
-        obs = obs.reshape(runner.batch_ob_shape)
-        actions = actions.reshape([runner.nbatch])
-        rewards = rewards.reshape([runner.nbatch])
-        mus = mus.reshape([runner.nbatch, runner.nact])
-        dones = dones.reshape([runner.nbatch])
-        masks = masks.reshape([runner.batch_ob_shape[0]])
+            obs = obs.reshape(runner.batch_ob_shape)
+            actions = actions.reshape([runner.nbatch])
+            rewards = rewards.reshape([runner.nbatch])
+            mus = mus.reshape([runner.nbatch, runner.nact])
+            dones = dones.reshape([runner.nbatch])
+            masks = masks.reshape([runner.batch_ob_shape[0]])
 
-        names_ops, values_ops = model.train(obs, actions, rewards, dones, mus, model.initial_state, masks, steps)
+            names_ops, values_ops = model.train(obs, actions, rewards, dones, mus, model.initial_state, masks, steps)
 
-        if on_policy and (int(steps/runner.nbatch) % self.log_interval == 0):
-            logger.record_tabular("total_timesteps", steps)
-            logger.record_tabular("fps", int(steps/(time.time() - self.tstart)))
-            # IMP: In EpisodicLife env, during training, we get done=True at each loss of life, not just at the terminal state.
-            # Thus, this is mean until end of life, not end of episode.
-            # For true episode rewards, see the monitor files in the log folder.
-            logger.record_tabular("mean_episode_length", self.episode_stats.mean_length())
-            logger.record_tabular("mean_episode_reward", self.episode_stats.mean_reward())
-            for name, val in zip(names_ops, values_ops):
-                logger.record_tabular(name, float(val))
-            logger.dump_tabular()
+            if on_policy and (int(steps/runner.nbatch) % self.log_interval == 0):
+                logger.record_tabular("total_timesteps", steps)
+                logger.record_tabular("fps", int(steps/(time.time() - self.tstart)))
+                # IMP: In EpisodicLife env, during training, we get done=True at each loss of life, not just at the terminal state.
+                # Thus, this is mean until end of life, not end of episode.
+                # For true episode rewards, see the monitor files in the log folder.
+                logger.record_tabular("mean_episode_length", self.episode_stats.mean_length())
+                logger.record_tabular("mean_episode_reward", self.episode_stats.mean_reward())
+                for name, val in zip(names_ops, values_ops):
+                    logger.record_tabular(name, float(val))
+                logger.dump_tabular()
 
-            if save_networks:
-                model.save(int(steps))
+                if save_networks:
+                    model.save(int(steps))
 
 
-def learn(policy, env, seed, perform, expert = False,save_networks = False, network_saving_dir = None, total_timesteps = int(80e6),nsteps=20,nstack=4, q_coef=0.5, ent_coef=0.01,
+def learn(policy, env, seed, perform = False, expert = False, save_networks = False, network_saving_dir = None, total_timesteps = int(80e6),nsteps=20,nstack=4, q_coef=0.5, ent_coef=0.01,
           max_grad_norm=10, lr=7e-4, lrschedule='linear', rprop_epsilon=1e-5, rprop_alpha=0.99, gamma=0.99,
           log_interval=100, buffer_size=50000, replay_ratio=4, replay_start=10000, c=10.0,
           trust_region=True, alpha=0.99, delta=1):
@@ -388,14 +375,16 @@ def learn(policy, env, seed, perform, expert = False,save_networks = False, netw
     acer = Acer(runner, model, buffer, log_interval)
     acer.tstart = time.time()
 
-    #model.load()
+    if perform:
+        model.load()
+
     for acer.steps in range(0, total_timesteps, nbatch): #nbatch samples, 1 on_policy call and multiple off-policy calls
-        acer.call(save_networks,on_policy=True)
+        acer.call(perform, save_networks,on_policy=True)
 
         if replay_ratio > 0 and buffer.has_atleast(replay_start):
             n = np.random.poisson(replay_ratio)
             for _ in range(n):
-                acer.call(save_networks,on_policy=False)  # no simulation steps in this
+                acer.call(perform, save_networks,on_policy=False)  # no simulation steps in this
 
     #dir = os.path.join('./models/', 'test.m')
     #model.save('./models/test_2.pkl')
