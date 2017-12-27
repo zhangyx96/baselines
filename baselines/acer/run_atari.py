@@ -60,7 +60,7 @@ def main():
     dir = os.path.join('./logs/', datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f"))
     logger.configure(dir=dir)
     train(args.env, num_timesteps=args.num_timesteps, seed=args.seed,
-          policy=args.policy, lrschedule=args.lrschedule, num_cpu=16, perform = args.perform,expert = args.use_expert, save_networks = args.save_networks)
+          policy=args.policy, lrschedule=args.lrschedule, num_cpu=16, perform = args.perform, use_expert = args.use_expert, save_networks = args.save_networks)
 
 if __name__ == '__main__':
     main()
