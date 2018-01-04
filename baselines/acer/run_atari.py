@@ -11,7 +11,7 @@ import datetime
 import argparse
 
 
-def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu, perform, expert,save_networks):
+def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu, perform, use_expert, save_networks):
     def make_env(rank):
         def _thunk():
             env = make_atari(env_id)
@@ -34,7 +34,7 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu, perform, exp
     if not os.path.exists(network_saving_dir):
         os.makedirs(network_saving_dir)
         
-    learn(policy_fn, env, seed, perform, expert, save_networks, network_saving_dir, int(num_timesteps * 1.1), lrschedule=lrschedule)
+    learn(policy_fn, env, seed, perform, use_expert, save_networks, network_saving_dir, int(num_timesteps * 1.1), lrschedule=lrschedule)
     env.close()
 
 def main():
@@ -45,7 +45,8 @@ def main():
     parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'lstm', 'lnlstm'], default='cnn')
     parser.add_argument('--lrschedule', help='Learning rate schedule', choices=['constant', 'linear'], default='constant')
     parser.add_argument('--logdir', help ='Directory for logging', default='./log')
-    parser.add_argument('--num-timesteps', type=int, default=int(10e4))
+    parser.add_argument('--num-timesteps', type=int, default=int(10e6))
+    parser.add_argument('--log-dir', type=str, default=None)
     boolean_flag(parser, 'perform', default=False)
     boolean_flag(parser, 'use-expert', default=False)
     boolean_flag(parser, 'save-networks', default=False)
@@ -53,12 +54,22 @@ def main():
     args = parser.parse_args()
 
     # logger.configure(os.path.abspath(args.logdir))
-    # print(args['env_id'])
-    #dir = os.path.join('./logs/', args['env'], datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f"))
-   
-    
-    dir = os.path.join('./logs/', datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f"))
+
+    # dir = os.path.join('./logs/', datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f"))
+    # logger.configure(dir=dir)
+
+    #set the log_dir
+
+    if args.log_dir is None:
+        dir = os.path.join('./logs/', args.env,
+                           datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f"))
+    else:
+        dir = os.path.join('./logs/', args.env, args.log_dir)
     logger.configure(dir=dir)
+
+    del args.log_dir
+
+
     train(args.env, num_timesteps=args.num_timesteps, seed=args.seed,
           policy=args.policy, lrschedule=args.lrschedule, num_cpu=16, perform = args.perform, use_expert = args.use_expert, save_networks = args.save_networks)
 

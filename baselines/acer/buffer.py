@@ -2,7 +2,7 @@ import numpy as np
 
 class Buffer(object):
     # gets obs, actions, rewards, mu's, (states, masks), dones
-    def __init__(self, env, nsteps, nstack, size=50000):
+    def __init__(self, env, nsteps, nstack, size=2000):
         self.nenv = env.num_envs
         self.nsteps = nsteps
         self.nh, self.nw, self.nc = env.observation_space.shape
