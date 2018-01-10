@@ -540,12 +540,12 @@ def learn(policy, env, seed, perform = False, use_expert = False, save_networks 
 	for acer.steps in range(0, total_timesteps, nbatch): #nbatch samples, 1 on_policy call and multiple off-policy calls
 		
 
-		# if acer.steps >5e4 and use_expert:
-		# 	print('-------------------------')
-		# 	print('Reuse the normal networks')
-		# 	print('-------------------------')
-		# 	use_expert = False
-		# 	expert = None
+		if acer.steps >4e6 and use_expert:
+			print('-------------------------')
+			print('Reuse the normal networks')
+			print('-------------------------')
+			use_expert = False
+			expert = None
 
 		acer.call(perform, save_networks, use_expert, expert, on_policy=True)
 
