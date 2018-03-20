@@ -24,6 +24,8 @@ def worker(remote, parent_remote, env_fn_wrapper):
             break
         elif cmd == 'get_spaces':
             remote.send((env.action_space, env.observation_space))
+        elif cmd == 'render':
+            env.render()
         else:
             raise NotImplementedError
 
@@ -65,6 +67,7 @@ class SubprocVecEnv(VecEnv):
     def step(self, actions):
         for remote, action in zip(self.remotes, actions):
             remote.send(('step', action))
+            #remote.send(('render', None))   #render
         results = [remote.recv() for remote in self.remotes]
         obs, rews, dones, infos = zip(*results)
         return np.stack(obs), np.stack(rews), np.stack(dones), infos

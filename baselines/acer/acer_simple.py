@@ -14,6 +14,7 @@ from baselines.a2c.utils import EpisodeStats
 from baselines.a2c.utils import get_by_index, check_shape, avg_norm, gradient_add, q_explained_variance
 from baselines.acer.buffer import Buffer
 from baselines.acer.expert import Expert
+from baselines.common.atari_wrappers import make_atari, wrap_deepmind
 
 
 # remove last step
@@ -66,7 +67,7 @@ class Model(object):
 		sess = tf.Session(config=config)
 		nact = ac_space.n
 		nbatch = nenvs * nsteps
-  
+
 		A = tf.placeholder(tf.int32, [nbatch]) # actions
 		D = tf.placeholder(tf.float32, [nbatch]) # dones
 		R = tf.placeholder(tf.float32, [nbatch]) # rewards, not returns
@@ -265,8 +266,8 @@ class Model(object):
 				expert_run_ops = None
 				expert_names_ops = None
 
-		
-		
+
+
 
 
 		def train(obs, actions, rewards, dones, mus, states, masks, steps):
@@ -306,7 +307,7 @@ class Model(object):
 		def save(training_step):
 			logger.info('Saved network with {} training steps'.format(training_step))
 			self.saver.save(self.sess, self.cpk_dir + 'demo', global_step=training_step)
-		
+
 		def load():
 			print(self.cpk_dir)
 			checkpoint = tf.train.get_checkpoint_state(self.cpk_dir)
@@ -332,7 +333,7 @@ class Model(object):
 		tf.global_variables_initializer().run(session=sess)
 
 class Runner(object):
-	def __init__(self, env, model, nsteps, nstack):
+	def __init__(self, env, model, nsteps, nstack, env_id):
 		self.env = env
 		self.nstack = nstack
 		self.model = model
@@ -349,6 +350,8 @@ class Runner(object):
 		self.states = model.initial_state
 		self.dones = [False for _ in range(nenv)]
 
+
+
 	def update_obs(self, obs, dones=None):
 		if dones is not None:
 			self.obs *= (1 - dones.astype(np.uint8))[:, None, None, None]
@@ -358,6 +361,7 @@ class Runner(object):
 	def run(self):
 		enc_obs = np.split(self.obs, self.nstack, axis=3)  # so now list of obs steps
 		mb_obs, mb_actions, mb_mus, mb_dones, mb_rewards = [], [], [], [], []
+		#self.env_s.reset()
 		for _ in range(self.nsteps):
 			actions, mus, states = self.model.step(self.obs, state=self.states, mask=self.dones)
 			mb_obs.append(np.copy(self.obs))
@@ -365,6 +369,12 @@ class Runner(object):
 			mb_mus.append(mus)
 			mb_dones.append(self.dones)
 			obs, rewards, dones, _ = self.env.step(actions)
+
+			# aa,bb,cc,dd = self.env_s.step(actions[0])
+			# self.env_s.render()
+			# if cc == True:
+			# 	self.env_s.reset()
+
 			# states information for statefull models like LSTM
 			self.states = states
 			self.dones = dones
@@ -385,10 +395,16 @@ class Runner(object):
 		mb_masks = mb_dones # Used for statefull models like LSTM's to mask state when done
 		mb_dones = mb_dones[:, 1:] # Used for calculating returns. The dones array is now aligned with rewards
 
+
 		# shapes are now [nenv, nsteps, []]
 		# When pulling from buffer, arrays will now be reshaped in place, preventing a deep copy.
 
 		return enc_obs, mb_obs, mb_actions, mb_rewards, mb_mus, mb_dones, mb_masks
+
+	def myrun(self):
+		actions, mus, states = self.model.step(self.obs, state=self.states, mask=self.dones)
+
+
 
 class Acer():
 	def __init__(self, runner, model, buffer, log_interval, expert_buffer = None):
@@ -410,6 +426,7 @@ class Acer():
 
 		if on_policy:
 			enc_obs, obs, actions, rewards, mus, dones, masks = runner.run()
+			runner.myrun()
 			# if self.flag>0:
 			# 	print(self.flag,'=================================')
 			# 	print(enc_obs, obs, actions, rewards, mus, dones, masks)
@@ -420,10 +437,10 @@ class Acer():
 		else:
 			# get obs, actions, rewards, mus, dones from buffer.
 			obs, actions, rewards, mus, dones, masks = buffer.get()
+			#enc_obs, obs, actions, rewards, mus, dones, masks = runner.run()
 
 
-
-		if not perform: 
+		if not perform:
 		# reshape stuff correctly
 			obs = obs.reshape(runner.batch_ob_shape)
 			actions = actions.reshape([runner.nbatch])
@@ -495,7 +512,7 @@ class Acer():
 				logger.dump_tabular()
 
 
-def learn(policy, env, seed, perform = False, use_expert = False, save_networks = False, network_saving_dir = None, total_timesteps = int(80e6),nsteps=20,nstack=4, q_coef=0.5, ent_coef=0.01,
+def learn(policy, env, seed, env_id, perform = False, use_expert = False, save_networks = False, network_saving_dir = None,total_timesteps = int(80e6),nsteps=20,nstack=4, q_coef=0.5, ent_coef=0.01,
 		  max_grad_norm=10, lr=7e-4, lrschedule='linear', rprop_epsilon=1e-5, rprop_alpha=0.99, gamma=0.99,
 		  log_interval=10, buffer_size=50000, replay_ratio=4, replay_start=10000, c=10.0,
 		  trust_region=True, alpha=0.99, delta=1):
@@ -509,12 +526,12 @@ def learn(policy, env, seed, perform = False, use_expert = False, save_networks 
 	ac_space = env.action_space   #Discrete(4)
 
 	if use_expert:
-		expert = Expert(env=env, nsteps=nsteps, nstack=nstack, size=buffer_size)
+		expert = Expert(env=env, nsteps=nsteps, nstack=nstack, size=10000)  #Exp1:50000; Exp2:25000 ; Exp3:10000
 		expert_dir = os.path.join('./expert') + '/expert.pkl'
 		expert.load_file(expert_dir)
 	else:
 		expert = None
-	
+
 
 	num_procs = len(env.remotes) # HACK
 	model = Model(policy=policy, ob_space=ob_space, ac_space=ac_space, nenvs=nenvs, nsteps=nsteps, nstack=nstack,
@@ -523,7 +540,7 @@ def learn(policy, env, seed, perform = False, use_expert = False, save_networks 
 				  total_timesteps=total_timesteps, lrschedule=lrschedule, c=c,
 				  trust_region=trust_region, alpha=alpha, delta=delta, network_saving_dir = network_saving_dir, use_expert=use_expert, expert = expert)
 
-	runner = Runner(env=env, model=model, nsteps=nsteps, nstack=nstack)
+	runner = Runner(env=env, model=model, nsteps=nsteps, nstack=nstack, env_id = env_id)
 
 	if replay_ratio > 0:
 		buffer = Buffer(env=env, nsteps=nsteps, nstack=nstack, size=buffer_size)
@@ -538,7 +555,7 @@ def learn(policy, env, seed, perform = False, use_expert = False, save_networks 
 	acer.tstart = time.time()
 
 	for acer.steps in range(0, total_timesteps, nbatch): #nbatch samples, 1 on_policy call and multiple off-policy calls
-		
+
 
 		if acer.steps >4e6 and use_expert:
 			print('-------------------------')

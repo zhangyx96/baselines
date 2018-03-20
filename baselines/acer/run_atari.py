@@ -33,15 +33,15 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu, perform, use
     network_saving_dir = os.path.join('./saved_networks', env_id)+'/'
     if not os.path.exists(network_saving_dir):
         os.makedirs(network_saving_dir)
-        
-    learn(policy_fn, env, seed, perform, use_expert, save_networks, network_saving_dir, int(num_timesteps * 1.1), lrschedule=lrschedule)
+
+    learn(policy_fn, env, seed, env_id, perform, use_expert, save_networks, network_saving_dir, int(num_timesteps * 1.1), lrschedule=lrschedule)
     env.close()
 
 def main():
-    
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     #parser.add_argument('--env', help='environment ID', default='BreakoutNoFrameskip-v4')
-    parser.add_argument('--env', help='environment ID', default='AirRaidNoFrameskip-v4')
+    parser.add_argument('--env', help='environment ID', default='BreakoutNoFrameskip-v4')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'lstm', 'lnlstm'], default='cnn')
     parser.add_argument('--lrschedule', help='Learning rate schedule', choices=['constant', 'linear'], default='constant')
