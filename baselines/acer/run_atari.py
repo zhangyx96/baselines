@@ -11,7 +11,7 @@ import datetime
 import argparse
 
 
-def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu, perform, use_expert, save_networks):
+def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu, perform, use_expert, save_networks, learn_time, expert_buffer_size):
     def make_env(rank):
         def _thunk():
             env = make_atari(env_id)
@@ -34,20 +34,22 @@ def train(env_id, num_timesteps, seed, policy, lrschedule, num_cpu, perform, use
     if not os.path.exists(network_saving_dir):
         os.makedirs(network_saving_dir)
 
-    learn(policy_fn, env, seed, env_id, perform, use_expert, save_networks, network_saving_dir, int(num_timesteps * 1.1), lrschedule=lrschedule)
+    learn(policy_fn, env, seed, env_id, learn_time, expert_buffer_size, perform, use_expert, save_networks, network_saving_dir, int(num_timesteps * 1.1), lrschedule=lrschedule)
     env.close()
 
 def main():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--env', help='environment ID', default='CarnivalNoFrameskip-v4')
     #parser.add_argument('--env', help='environment ID', default='BreakoutNoFrameskip-v4')
-    parser.add_argument('--env', help='environment ID', default='BreakoutNoFrameskip-v4')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'lstm', 'lnlstm'], default='cnn')
     parser.add_argument('--lrschedule', help='Learning rate schedule', choices=['constant', 'linear'], default='constant')
     parser.add_argument('--logdir', help ='Directory for logging', default='./log')
     parser.add_argument('--num-timesteps', type=int, default=int(10e6))
     parser.add_argument('--log-dir', type=str, default=None)
+    parser.add_argument('--learntime', type=int, default=int(4e6))
+    parser.add_argument('--buffersize', type=int, default=int(50000))
     boolean_flag(parser, 'perform', default=False)
     boolean_flag(parser, 'use-expert', default=False)
     boolean_flag(parser, 'save-networks', default=False)
@@ -68,11 +70,10 @@ def main():
         dir = os.path.join('./logs/', args.env, args.log_dir)
     logger.configure(dir=dir)
 
-    del args.log_dir
-
 
     train(args.env, num_timesteps=args.num_timesteps, seed=args.seed,
-          policy=args.policy, lrschedule=args.lrschedule, num_cpu=16, perform = args.perform, use_expert = args.use_expert, save_networks = args.save_networks)
+          policy=args.policy, lrschedule=args.lrschedule, num_cpu=16, perform = args.perform, use_expert = args.use_expert, save_networks = args.save_networks,
+          learn_time=args.learntime,expert_buffer_size = args.buffersize)
 
 if __name__ == '__main__':
     main()

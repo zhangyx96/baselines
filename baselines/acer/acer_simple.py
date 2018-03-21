@@ -359,6 +359,10 @@ class Runner(object):
 		self.obs[:, :, :, -self.nc:] = obs[:, :, :, :]
 
 	def run(self):
+		# print('***********************')
+		# print(self.nstack)
+		# print('***********************')
+		# env.render();
 		enc_obs = np.split(self.obs, self.nstack, axis=3)  # so now list of obs steps
 		mb_obs, mb_actions, mb_mus, mb_dones, mb_rewards = [], [], [], [], []
 		#self.env_s.reset()
@@ -369,7 +373,9 @@ class Runner(object):
 			mb_mus.append(mus)
 			mb_dones.append(self.dones)
 			obs, rewards, dones, _ = self.env.step(actions)
-
+			# print('-------------')
+			# print(obs.dtype)
+			# env.render();
 			# aa,bb,cc,dd = self.env_s.step(actions[0])
 			# self.env_s.render()
 			# if cc == True:
@@ -383,7 +389,10 @@ class Runner(object):
 			enc_obs.append(obs)
 		mb_obs.append(np.copy(self.obs))
 		mb_dones.append(self.dones)
-
+		print('***********************')
+		print(enc_obs.shape)
+		print('***********************')
+		env.render();
 		enc_obs = np.asarray(enc_obs, dtype=np.uint8).swapaxes(1, 0)
 		mb_obs = np.asarray(mb_obs, dtype=np.uint8).swapaxes(1, 0)
 		mb_actions = np.asarray(mb_actions, dtype=np.int32).swapaxes(1, 0)
@@ -426,6 +435,7 @@ class Acer():
 
 		if on_policy:
 			enc_obs, obs, actions, rewards, mus, dones, masks = runner.run()
+
 			runner.myrun()
 			# if self.flag>0:
 			# 	print(self.flag,'=================================')
@@ -481,15 +491,13 @@ class Acer():
 
 		else:  #if perform
 			expert_buffer.append([enc_obs, actions, rewards, mus, dones, masks])
-			# print('***********************')
-			# print(rewards)
-			# print('***********************')
+
 
 			if len(expert_buffer)>0 and len(expert_buffer)%100 == 0:
 				expert_dir = os.path.join('./expert')+'/'
 				if not os.path.exists(expert_dir):
 					os.makedirs(expert_dir)
-				pwritefile = open(os.path.join(expert_dir, 'expert.pkl'),'wb')
+				pwritefile = open(os.path.join(expert_dir, 'expert_test.pkl'),'wb')
 				pickle.dump(expert_buffer,pwritefile,-1)
 				pwritefile.close()
 				logger.info('Successfully Saved the Expert Data')
@@ -512,7 +520,7 @@ class Acer():
 				logger.dump_tabular()
 
 
-def learn(policy, env, seed, env_id, perform = False, use_expert = False, save_networks = False, network_saving_dir = None,total_timesteps = int(80e6),nsteps=20,nstack=4, q_coef=0.5, ent_coef=0.01,
+def learn(policy, env, seed, env_id, learn_time, expert_buffer_size, perform = False, use_expert = False, save_networks = False, network_saving_dir = None,total_timesteps = int(80e6),nsteps=20,nstack=4, q_coef=0.5, ent_coef=0.01,
 		  max_grad_norm=10, lr=7e-4, lrschedule='linear', rprop_epsilon=1e-5, rprop_alpha=0.99, gamma=0.99,
 		  log_interval=10, buffer_size=50000, replay_ratio=4, replay_start=10000, c=10.0,
 		  trust_region=True, alpha=0.99, delta=1):
@@ -526,9 +534,13 @@ def learn(policy, env, seed, env_id, perform = False, use_expert = False, save_n
 	ac_space = env.action_space   #Discrete(4)
 
 	if use_expert:
-		expert = Expert(env=env, nsteps=nsteps, nstack=nstack, size=10000)  #Exp1:50000; Exp2:25000 ; Exp3:10000
+		expert = Expert(env=env, nsteps=nsteps, nstack=nstack, size=expert_buffer_size)  #Exp1:50000; Exp2:25000 ; Exp3:10000
 		expert_dir = os.path.join('./expert') + '/expert.pkl'
-		expert.load_file(expert_dir)
+		file_dir = '/home/zhangxiaoqin/Projects/conda/atari_v1/'
+		expert.load_file_human(file_dir)
+		#expert.load_file(expert_dir)
+		expert.p()
+
 	else:
 		expert = None
 
@@ -557,7 +569,7 @@ def learn(policy, env, seed, env_id, perform = False, use_expert = False, save_n
 	for acer.steps in range(0, total_timesteps, nbatch): #nbatch samples, 1 on_policy call and multiple off-policy calls
 
 
-		if acer.steps >4e6 and use_expert:
+		if acer.steps >learn_time and use_expert:
 			print('-------------------------')
 			print('Reuse the normal networks')
 			print('-------------------------')
