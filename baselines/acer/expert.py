@@ -39,8 +39,13 @@ class Expert:
 		del expert_data
 		gc.collect()
 
+	def update_obs(self, obs, dones=None):
+		if dones is not None:
+			self.obs *= (1 - dones.astype(np.uint8))[:, None, None, None]
+		self.obs = np.roll(self.obs, shift=-self.nc, axis=3)
+		self.obs[:, :, :, -self.nc:] = obs[:, :, :, :]	
 
-	def load_file_human(self,file_dir = '/home/zhangxiaoqin/Projects/conda/atari_v1/'):
+	def load_file_human(self,file_dir = '/home/zhangxiaoqin/atari_v1/'):
 		import agc.dataset as ds
 		import agc.util as util
 		import cv2
@@ -52,7 +57,6 @@ class Expert:
 		frame_point = np.zeros((16),dtype = np.int)  #f_p[0][0]   first_line->file_num,  sec_line->frame_num
 		dataset = ds.AtariDataset(file_dir)
 		all_trajectories = dataset.trajectories
-		num = all_trajectories
 		screenshoot_dir = os.path.join(file_dir,'screens/spaceinvaders')
 		flag = 1
 		k=0
@@ -66,14 +70,10 @@ class Expert:
 		init_obs = np.zeros((16, 84, 84, 4), dtype=np.uint8)
 		enc_obs = np.split(init_obs, 4, axis=3)  # so now list of obs steps
 		mb_obs, mb_actions, mb_mus, mb_dones, mb_rewards = [], [], [], [], []
-		for _ in range(nsteps):
+		while(flag):
+			for _ in range(nsteps):
 			#actions, mus, states = self.model.step(self.obs, state=self.states, mask=self.dones)
-			obs = np.zeros([16,84,84,1],dtype = np.uint8)
-			while(flag):
-				print('----------------------')
-				print(file_point)
-				print(frame_point)
-				#print(next_file_point)
+				obs = np.zeros([16,84,84,1],dtype = np.uint8)
 				for i in np.arange(16):
 					pic_path = os.path.join(screenshoot_dir,str(file_point[i]),str(frame_point[i]))+'.png'
 					pic = cv2.imread(pic_path)
@@ -86,37 +86,36 @@ class Expert:
 						frame_point[i] = 0
 						file_point[i] = next_file_point
 						next_file_point = next_file_point + 1
-
 						while next_file_point not in dataset.trajectories['spaceinvaders'] and next_file_point<=514:
 							next_file_point = next_file_point+1
 					if next_file_point>514:
 						flag = False
+				mb_obs.append(np.copy(self.obs))
+				mb_actions.append(actions)
+				mb_mus.append(mus)
+				mb_dones.append(self.dones)
+				#obs, rewards, dones, _ = self.env.step(actions)
+				#env.render();
+				# aa,bb,cc,dd = self.env_s.step(actions[0])
+				# self.env_s.render()
+				# if cc == True:
+				# 	self.env_s.reset()
+				# states information for statefull models like LSTM
+				self.states = states
+				self.dones = dones
+				#self.update_obs(obs, dones)
+				mb_rewards.append(rewards)
+				enc_obs.append(obs)
 			mb_obs.append(np.copy(self.obs))
-			mb_actions.append(actions)
-			mb_mus.append(mus)
 			mb_dones.append(self.dones)
-			#obs, rewards, dones, _ = self.env.step(actions)
-			#env.render();
-			# aa,bb,cc,dd = self.env_s.step(actions[0])
-			# self.env_s.render()
-			# if cc == True:
-			# 	self.env_s.reset()
-			# states information for statefull models like LSTM
-			self.states = states
-			self.dones = dones
-			#self.update_obs(obs, dones)
-			mb_rewards.append(rewards)
-			enc_obs.append(obs)
-		mb_obs.append(np.copy(self.obs))
-		mb_dones.append(self.dones)
-		enc_obs = np.asarray(enc_obs, dtype=np.uint8).swapaxes(1, 0)
-		mb_obs = np.asarray(mb_obs, dtype=np.uint8).swapaxes(1, 0)
-		mb_actions = np.asarray(mb_actions, dtype=np.int32).swapaxes(1, 0)
-		mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(1, 0)
-		mb_mus = np.asarray(mb_mus, dtype=np.float32).swapaxes(1, 0)
-		mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(1, 0)
-		mb_masks = mb_dones # Used for statefull models like LSTM's to mask state when done
-		mb_dones = mb_dones[:, 1:] # Used for calculating returns. The dones array is now aligned with rewards
+			enc_obs = np.asarray(enc_obs, dtype=np.uint8).swapaxes(1, 0)
+			mb_obs = np.asarray(mb_obs, dtype=np.uint8).swapaxes(1, 0)
+			mb_actions = np.asarray(mb_actions, dtype=np.int32).swapaxes(1, 0)
+			mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(1, 0)
+			mb_mus = np.asarray(mb_mus, dtype=np.float32).swapaxes(1, 0)
+			mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(1, 0)
+			mb_masks = mb_dones # Used for statefull models like LSTM's to mask state when done
+			mb_dones = mb_dones[:, 1:] # Used for calculating returns. The dones array is now aligned with rewards
 
 
 

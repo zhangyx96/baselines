@@ -359,10 +359,6 @@ class Runner(object):
 		self.obs[:, :, :, -self.nc:] = obs[:, :, :, :]
 
 	def run(self):
-		# print('***********************')
-		# print(self.nstack)
-		# print('***********************')
-		# env.render();
 		enc_obs = np.split(self.obs, self.nstack, axis=3)  # so now list of obs steps
 		mb_obs, mb_actions, mb_mus, mb_dones, mb_rewards = [], [], [], [], []
 		#self.env_s.reset()
@@ -373,14 +369,6 @@ class Runner(object):
 			mb_mus.append(mus)
 			mb_dones.append(self.dones)
 			obs, rewards, dones, _ = self.env.step(actions)
-			# print('-------------')
-			# print(obs.dtype)
-			# env.render();
-			# aa,bb,cc,dd = self.env_s.step(actions[0])
-			# self.env_s.render()
-			# if cc == True:
-			# 	self.env_s.reset()
-
 			# states information for statefull models like LSTM
 			self.states = states
 			self.dones = dones
@@ -389,10 +377,6 @@ class Runner(object):
 			enc_obs.append(obs)
 		mb_obs.append(np.copy(self.obs))
 		mb_dones.append(self.dones)
-		print('***********************')
-		print(enc_obs.shape)
-		print('***********************')
-		env.render();
 		enc_obs = np.asarray(enc_obs, dtype=np.uint8).swapaxes(1, 0)
 		mb_obs = np.asarray(mb_obs, dtype=np.uint8).swapaxes(1, 0)
 		mb_actions = np.asarray(mb_actions, dtype=np.int32).swapaxes(1, 0)
@@ -537,9 +521,9 @@ def learn(policy, env, seed, env_id, learn_time, expert_buffer_size, perform = F
 		expert = Expert(env=env, nsteps=nsteps, nstack=nstack, size=expert_buffer_size)  #Exp1:50000; Exp2:25000 ; Exp3:10000
 		expert_dir = os.path.join('./expert') + '/expert.pkl'
 		file_dir = '/home/zhangxiaoqin/Projects/conda/atari_v1/'
-		expert.load_file_human(file_dir)
-		#expert.load_file(expert_dir)
-		expert.p()
+		#expert.load_file_human(file_dir)
+		expert.load_file(expert_dir)
+		
 
 	else:
 		expert = None
